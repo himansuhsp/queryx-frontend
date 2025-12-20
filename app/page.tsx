@@ -16,8 +16,11 @@ interface AnswerResponse {
 }
 
 const BACKEND_URL =
+
   (process.env.NEXT_PUBLIC_BACKEND_URL || "https://queryx-backend-production.up.railway.app")
+  .trim()
   .replace(/\/+$/,"");
+  console.log("BACKEND_URL =",BACKEND_URL);
 
 const DAILY_LIMIT = 10;
 
