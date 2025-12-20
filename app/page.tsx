@@ -15,12 +15,9 @@ interface AnswerResponse {
   answer_text: string;
 }
 
-const BACKEND_URL =
-
-  (process.env.NEXT_PUBLIC_BACKEND_URL || "https://queryx-backend-production.up.railway.app")
-  .trim()
-  .replace(/\/+$/,"");
-  console.log("BACKEND_URL =",BACKEND_URL);
+const BACKEND_URL = (
+  process.env.NEXT_PUBLIC_BACKEND_URL || "https://queryx-backend-production.up.railway.app"
+).replace(/\/+$/, ""); // remove trailing /
 
 const DAILY_LIMIT = 10;
 
@@ -46,9 +43,31 @@ function getOrCreateDeviceId(): string {
     localStorage.setItem(key, id);
     return id;
   } catch {
-    // fallback in worst case
     return `qx_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   }
+}
+
+/**
+ * ✅ Normalize Gemini LaTeX delimiters to what remark-math parses:
+ * \( ... \)  -> $ ... $
+ * \[ ... \]  -> $$ ... $$
+ */
+function normalizeLatexDelimiters(text: string): string {
+  if (!text) return text;
+
+  // Convert display math \[...\] to $$...$$
+  // (Gemini often returns these)
+  let out = text.replace(/\\\[/g, "$$").replace(/\\\]/g, "$$");
+
+  // Convert inline math \(...\) to $...$
+  out = out.replace(/\\\(/g, "$").replace(/\\\)/g, "$");
+
+  // Also handle common accidental escapes like \\[ from markdown
+  // (rare, but safe)
+  out = out.replace(/\\\\\[/g, "$$").replace(/\\\\\]/g, "$$");
+  out = out.replace(/\\\\\(/g, "$").replace(/\\\\\)/g, "$");
+
+  return out;
 }
 
 export default function Page() {
@@ -78,7 +97,7 @@ export default function Page() {
   const [isLoadingImage, setIsLoadingImage] = useState(false);
 
   const [questionsUsed, setQuestionsUsed] = useState(0);
-  const [usageStatus, setUsageStatus] = useState<string>(""); // small status line
+  const [usageStatus, setUsageStatus] = useState<string>("");
 
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [feedbackText, setFeedbackText] = useState("");
@@ -87,13 +106,16 @@ export default function Page() {
   const isLoading = isLoadingText || isLoadingImage;
   const limitReached = questionsUsed >= DAILY_LIMIT;
 
-  // ---------- INIT device_id ----------
+  // ✅ normalized text for Markdown+KaTeX rendering
+  const renderedAnswer = useMemo(() => {
+    return normalizeLatexDelimiters(answerText);
+  }, [answerText]);
+
   useEffect(() => {
     const id = getOrCreateDeviceId();
     setDeviceId(id);
   }, []);
 
-  // ---------- LOAD THEME ----------
   useEffect(() => {
     try {
       const saved = localStorage.getItem("qx_theme");
@@ -103,9 +125,7 @@ export default function Page() {
         setTheme("dark");
         localStorage.setItem("qx_theme", "dark");
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
   const toggleTheme = () => {
@@ -113,12 +133,9 @@ export default function Page() {
     setTheme(next);
     try {
       localStorage.setItem("qx_theme", next);
-    } catch {
-      // ignore
-    }
+    } catch {}
   };
 
-  // ---------- LOAD USAGE FROM SUPABASE ----------
   useEffect(() => {
     const loadUsage = async () => {
       if (!supabase) return;
@@ -143,7 +160,6 @@ export default function Page() {
         }
 
         if (!data) {
-          // no row today, create it
           const { error: insErr } = await supabase.from("daily_usage").insert({
             device_id: deviceId,
             day: today,
@@ -172,9 +188,7 @@ export default function Page() {
     loadUsage();
   }, [supabase, deviceId]);
 
-  // ---------- SAVE USAGE TO SUPABASE ----------
   const incrementUsageInDb = async () => {
-    // optimistic UI
     const next = Math.min(DAILY_LIMIT, questionsUsed + 1);
     setQuestionsUsed(next);
 
@@ -183,8 +197,6 @@ export default function Page() {
     try {
       const today = getTodayISODate();
 
-      // simplest and safe enough for single-client beta:
-      // upsert overwrites count to the current next value
       const { error } = await supabase.from("daily_usage").upsert(
         {
           device_id: deviceId,
@@ -197,7 +209,6 @@ export default function Page() {
       if (error) {
         console.error("daily_usage upsert error:", error.message);
         setUsageStatus("Usage update failed (DB).");
-        // (optional) rollback UI, but for beta we keep UI optimistic
         return;
       }
 
@@ -208,7 +219,6 @@ export default function Page() {
     }
   };
 
-  // ---------- HANDLERS ----------
   const handleQuestionChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     setQuestionText(e.target.value);
   };
@@ -250,7 +260,8 @@ export default function Page() {
       });
 
       if (!resp.ok) {
-        setErrorMsg(`Server error (${resp.status}).`);
+        const t = await resp.text().catch(() => "");
+        setErrorMsg(`Server error (${resp.status}). ${t ? t.slice(0, 80) : ""}`);
       } else {
         const data = (await resp.json()) as AnswerResponse | { answer: string };
         const text =
@@ -302,7 +313,8 @@ export default function Page() {
       });
 
       if (!resp.ok) {
-        setErrorMsg(`Server error (${resp.status}).`);
+        const t = await resp.text().catch(() => "");
+        setErrorMsg(`Server error (${resp.status}). ${t ? t.slice(0, 80) : ""}`);
       } else {
         const data = (await resp.json()) as AnswerResponse | { answer: string };
         const text =
@@ -357,7 +369,6 @@ export default function Page() {
       return;
     }
 
-    // optimistic UI
     setFeedbackStatus("Submitting...");
     const message = feedbackText.trim();
     setFeedbackText("");
@@ -388,7 +399,6 @@ export default function Page() {
     }
   };
 
-  // ---------- STYLES ----------
   const pillClasses = (active: boolean) => {
     if (theme === "dark") {
       return [
@@ -450,11 +460,9 @@ export default function Page() {
   const styleLabel = style === "detailed" ? "Detailed" : "Short";
   const languageLabel = language === "english" ? "English" : "Hinglish";
 
-  // ---------- UI ----------
   return (
     <main className={mainClass}>
       <div className={cardClass}>
-        {/* HEADER */}
         <header className="flex items-center justify-between mb-6 gap-3">
           <div>
             <h1 className="text-2xl font-bold">QueryX</h1>
@@ -479,22 +487,17 @@ export default function Page() {
                 className={themeBtnClass}
               >
                 <span>{theme === "dark" ? "🌙 Night" : "☀️ Light"}</span>
-                <span className="text-[9px] uppercase tracking-wide">
-                  Toggle
-                </span>
+                <span className="text-[9px] uppercase tracking-wide">Toggle</span>
               </button>
             </div>
 
             <p className="text-xs text-slate-300">
               {questionsUsed} / {DAILY_LIMIT} free questions used today
             </p>
-            {usageStatus && (
-              <p className="text-[11px] text-slate-400">{usageStatus}</p>
-            )}
+            {usageStatus && <p className="text-[11px] text-slate-400">{usageStatus}</p>}
           </div>
         </header>
 
-        {/* TOGGLES */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
           <div className={controlBoxClass}>
             <p className="text-xs font-semibold text-slate-300 mb-2">Level</p>
@@ -537,9 +540,7 @@ export default function Page() {
           </div>
 
           <div className={controlBoxClass}>
-            <p className="text-xs font-semibold text-slate-300 mb-2">
-              Language
-            </p>
+            <p className="text-xs font-semibold text-slate-300 mb-2">Language</p>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -559,7 +560,6 @@ export default function Page() {
           </div>
         </section>
 
-        {/* TEXT QUESTION */}
         <section className="mb-5">
           <div className="flex items-center justify-between mb-2 gap-2">
             <p className="text-sm font-semibold">Enter your question</p>
@@ -598,11 +598,8 @@ export default function Page() {
           </div>
         </section>
 
-        {/* IMAGE QUESTION */}
         <section className="mb-5">
-          <p className="text-sm font-semibold mb-1">
-            Or upload a question image
-          </p>
+          <p className="text-sm font-semibold mb-1">Or upload a question image</p>
           <p className="text-[11px] text-slate-400 mb-2">
             Clear photo of the full question. Avoid blur / low light.
           </p>
@@ -613,7 +610,6 @@ export default function Page() {
               accept="image/*"
               onChange={handleImageChange}
               className="text-xs text-slate-200 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-100 hover:file:bg-slate-700"
-
             />
             <button
               type="button"
@@ -633,7 +629,6 @@ export default function Page() {
           </div>
         </section>
 
-        {/* ANSWER */}
         <section className="border-t border-slate-700 pt-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
             <p className="text-sm font-semibold">Answer:</p>
@@ -686,19 +681,15 @@ export default function Page() {
                   remarkPlugins={[remarkMath as any]}
                   rehypePlugins={[rehypeKatex as any]}
                 >
-                  {answerText}
+                  {renderedAnswer}
                 </ReactMarkdown>
               </div>
             ) : (
-              <p className="text-xs text-slate-400">
-                Your answer will appear here.
-              </p>
+              <p className="text-xs text-slate-400">Your answer will appear here.</p>
             )}
           </div>
 
-          {copyMsg && (
-            <p className="mt-2 text-[11px] text-emerald-400">{copyMsg}</p>
-          )}
+          {copyMsg && <p className="mt-2 text-[11px] text-emerald-400">{copyMsg}</p>}
 
           {errorMsg && (
             <p className="mt-2 text-xs text-red-400 font-medium flex items-center gap-1">
@@ -708,14 +699,10 @@ export default function Page() {
           )}
         </section>
 
-        {/* FEEDBACK */}
         <section className="mt-5 border-t border-slate-700 pt-4">
-          <p className="text-sm font-semibold mb-1">
-            Feature suggestion / feedback
-          </p>
+          <p className="text-sm font-semibold mb-1">Feature suggestion / feedback</p>
           <p className="text-[11px] text-slate-400 mb-2">
-            Koi naya feature idea hai ya QueryX ko better kaise banayein? Yahan
-            likho 👇
+            Koi naya feature idea hai ya QueryX ko better kaise banayein? Yahan likho 👇
           </p>
 
           <textarea
@@ -735,9 +722,7 @@ export default function Page() {
               Submit suggestion
             </button>
 
-            {feedbackStatus && (
-              <p className="text-[11px] text-slate-400">{feedbackStatus}</p>
-            )}
+            {feedbackStatus && <p className="text-[11px] text-slate-400">{feedbackStatus}</p>}
           </div>
         </section>
       </div>
