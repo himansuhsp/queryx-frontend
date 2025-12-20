@@ -16,7 +16,8 @@ interface AnswerResponse {
 }
 
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+  (process.env.NEXT_PUBLIC_BACKEND_URL || "https://queryx-backend-production.up.railway.app")
+  .replace(/\/+$/,"");
 
 const DAILY_LIMIT = 10;
 
