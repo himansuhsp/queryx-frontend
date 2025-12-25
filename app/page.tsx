@@ -273,8 +273,17 @@ export default function Page() {
           setErrorMsg("Empty response from backend.");
         } else {
           setAnswerText(text);
-          await incrementUsageInDb();
+await incrementUsageInDb();
+
+setTimeout(() => {
+  document.getElementById("answer")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}, 100);
+
         }
+
       }
     } catch (err) {
       console.error(err);
@@ -326,7 +335,15 @@ export default function Page() {
           setErrorMsg("Empty response from backend.");
         } else {
           setAnswerText(text);
-          await incrementUsageInDb();
+await incrementUsageInDb();
+
+setTimeout(() => {
+  document.getElementById("answer")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}, 100);
+
         }
       }
     } catch (err) {
