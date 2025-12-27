@@ -694,13 +694,16 @@ setTimeout(() => {
               </div>
             ) : answerText ? (
               <div className={proseClass}>
-                <ReactMarkdown
-                  remarkPlugins={[remarkMath as any]}
-                  rehypePlugins={[rehypeKatex as any]}
-                >
-                  {renderedAnswer}
-                </ReactMarkdown>
-              </div>
+  <div id="answer" className="answer" tabIndex={-1}>
+    <ReactMarkdown
+      remarkPlugins={[remarkMath as any]}
+      rehypePlugins={[rehypeKatex as any]}
+    >
+      {renderedAnswer}
+    </ReactMarkdown>
+  </div>
+</div>
+
             ) : (
               <p className="text-xs text-slate-400">Your answer will appear here.</p>
             )}
