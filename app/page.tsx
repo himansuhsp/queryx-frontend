@@ -16,7 +16,7 @@ interface AnswerResponse {
 }
 
 const BACKEND_URL = (
-  process.env.NEXT_PUBLIC_BACKEND_URL || "https://queryx-backend-production.up.railway.app"
+  process.env.NEXT_PUBLIC_BACKEND_URL || "https://api.queryxai.com"
 ).replace(/\/+$/, ""); // remove trailing /
 
 const DAILY_LIMIT = 10;
